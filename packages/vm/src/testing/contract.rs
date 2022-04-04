@@ -3,8 +3,8 @@ use wasmer::Module;
 use crate::backend::Backend;
 use crate::compatibility::check_wasm;
 use crate::instance::Instance;
-use crate::wasm_backend::compile;
 use crate::size::Size;
+use crate::wasm_backend::compile;
 
 use super::instance::MockInstanceOptions;
 use super::mock::MockApi;
@@ -34,7 +34,7 @@ impl<'a> Contract<'a> {
         wasm: &[u8],
         backend: Backend<MockApi, MockStorage, MockQuerier>,
         options: MockInstanceOptions<'a>,
-        memory_limit: Option<Size>
+        memory_limit: Option<Size>,
     ) -> TestingResult<Self> {
         check_wasm(wasm, &options.supported_features)?;
         let module = compile(wasm, memory_limit)?;
@@ -141,7 +141,8 @@ mod test {
     fn test_sanity_integration_test_flow() {
         let options = MockInstanceOptions::default();
         let backend = mock_backend(&[]);
-        let mut contract = Contract::from_code(CONTRACT_WITHOUT_MIGRATE, backend, options, None).unwrap();
+        let mut contract =
+            Contract::from_code(CONTRACT_WITHOUT_MIGRATE, backend, options, None).unwrap();
 
         // common env/info
         let env = mock_env();
@@ -231,7 +232,8 @@ mod test {
     fn test_err_call_generate_instance_twice() {
         let options = MockInstanceOptions::default();
         let backend = mock_backend(&[]);
-        let mut contract = Contract::from_code(CONTRACT_WITHOUT_MIGRATE, backend, options, None).unwrap();
+        let mut contract =
+            Contract::from_code(CONTRACT_WITHOUT_MIGRATE, backend, options, None).unwrap();
 
         // generate_instance
         let _instance = contract.generate_instance().unwrap();
@@ -245,7 +247,8 @@ mod test {
     fn test_err_call_recycle_before_generate_instance() {
         let options = MockInstanceOptions::default();
         let backend = mock_backend(&[]);
-        let mut contract = Contract::from_code(CONTRACT_WITHOUT_MIGRATE, backend, options, None).unwrap();
+        let mut contract =
+            Contract::from_code(CONTRACT_WITHOUT_MIGRATE, backend, options, None).unwrap();
 
         // make a dummy instance
         let dummy_instance = mock_instance(CONTRACT_WITHOUT_MIGRATE, &[]);
