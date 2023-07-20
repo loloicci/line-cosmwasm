@@ -1,8 +1,8 @@
 [package]
-name = "call-number"
+name = "call-number-trait"
 version = "0.1.0"
 authors = ["loloicci<loloicci@linecorp.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -30,7 +30,6 @@ cosmwasm-storage = { path = "../../packages/storage", features = ["iterator"] }
 schemars = "0.8.1"
 serde = { version = "1.0.125", default-features = false, features = ["derive"] }
 thiserror = "1.0.24"
-call-number-trait = { path = "../call-number-trait" }
 
 [dev-dependencies]
 cosmwasm-schema = { path = "../../packages/schema" }

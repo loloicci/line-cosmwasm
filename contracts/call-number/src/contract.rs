@@ -1,25 +1,13 @@
+use call_number_trait::{Number, NumberContract};
 use cosmwasm_std::{
-    dynamic_link, entry_point, from_slice, to_binary, to_vec, wasm_execute, Addr, Binary, Contract,
-    Deps, DepsMut, Env, MessageInfo, Reply, Response, SubMsg,
+    entry_point, from_slice, to_binary, to_vec, wasm_execute, Addr, Binary, Deps, DepsMut, Env,
+    MessageInfo, Reply, Response, SubMsg,
 };
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, NumberExecuteMsg, NumberResponse, QueryMsg};
 
 const ADDRESS_KEY: &[u8] = b"number-address";
-
-#[derive(Contract)]
-struct NumberContract {
-    address: Addr,
-}
-
-#[dynamic_link(NumberContract)]
-trait Number: Contract {
-    fn add(&self, by: i32);
-    fn sub(&self, by: i32);
-    fn mul(&self, by: i32);
-    fn number(&self) -> i32;
-}
 
 #[entry_point]
 pub fn instantiate(
