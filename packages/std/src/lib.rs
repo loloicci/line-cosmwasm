@@ -78,16 +78,16 @@ pub use crate::storage::MemoryStorage;
 pub use crate::timestamp::Timestamp;
 pub use crate::traits::{Api, Querier, QuerierResult, QuerierWrapper, Storage};
 pub use crate::types::{BlockInfo, ContractInfo, Env, MessageInfo, TransactionInfo};
-pub use crate::uuid::{new_uuid, Uuid};
+pub use crate::uuid::{new_uuid_original, new_uuid_api, new_uuid_api_separate, new_uuid_api_concat, new_uuid_native, new_uuid_native_concat, Uuid};
 
 // Exposed in wasm build only
 
-#[cfg(target_arch = "wasm32")]
 mod exports;
-#[cfg(target_arch = "wasm32")]
 mod imports;
-#[cfg(target_arch = "wasm32")]
 mod memory; // Used by exports and imports only. This assumes pointers are 32 bit long, which makes it untestable on dev machines.
+
+pub use crate::memory::{consume_region, Region, release_buffer};
+pub use crate::exports::make_dependencies;
 
 #[cfg(target_arch = "wasm32")]
 pub use crate::exports::{do_execute, do_instantiate, do_migrate, do_query, do_reply, do_sudo};
@@ -96,7 +96,6 @@ pub use crate::exports::{
     do_ibc_channel_close, do_ibc_channel_connect, do_ibc_channel_open, do_ibc_packet_ack,
     do_ibc_packet_receive, do_ibc_packet_timeout,
 };
-#[cfg(target_arch = "wasm32")]
 pub use crate::imports::{ExternalApi, ExternalQuerier, ExternalStorage};
 
 // Exposed for testing only

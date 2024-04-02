@@ -15,6 +15,8 @@ use cosmwasm_vm::{
     InstanceOptions, Size,
 };
 
+use uuid::Uuid;
+
 // Instance
 const DEFAULT_MEMORY_LIMIT: Size = Size::mebi(64);
 const DEFAULT_GAS_LIMIT: u64 = 1_000_000_000_000; // ~1ms
@@ -22,7 +24,7 @@ const DEFAULT_INSTANCE_OPTIONS: InstanceOptions = InstanceOptions {
     gas_limit: DEFAULT_GAS_LIMIT,
     print_debug: false,
 };
-const HIGH_GAS_LIMIT: u64 = 20_000_000_000_000_000; // ~20s, allows many calls on one instance
+const HIGH_GAS_LIMIT: u64 = 40_000_000_000_000_000; // ~20s, allows many calls on one instance
 
 // Cache
 const MEMORY_CACHE_SIZE: Size = Size::mebi(200);
@@ -32,6 +34,8 @@ const INSTANTIATION_THREADS: usize = 128;
 const CONTRACTS: u64 = 10;
 
 static CONTRACT: &[u8] = include_bytes!("../testdata/hackatom.wasm");
+static BENCH_SHA1: &[u8] = include_bytes!("../testdata/bench_sha1.wasm");
+static BENCH_UUID: &[u8] = include_bytes!("../testdata/bench_uuid.wasm");
 
 fn bench_instance(c: &mut Criterion) {
     let mut group = c.benchmark_group("Instance");
@@ -311,6 +315,287 @@ pub fn bench_instance_threads(c: &mut Criterion) {
     });
 }
 
+fn insert_comma(i: u64) -> String {
+    format!("{}", i)
+        .chars()
+        .rev()
+        .collect::<Vec<char>>()
+        .chunks(3)
+        .map(|cs| cs.iter().collect::<String>())
+        .collect::<Vec<String>>()
+        .join(",")
+        .chars()
+        .rev()
+        .collect::<String>()
+}
+
+fn bench_uuid(c: &mut Criterion) {
+    let mut group = c.benchmark_group("uuid");
+
+    let (_, memory_limit) = mock_instance_options();
+    let info = mock_info("creator", &coins(1000, "earth"));
+    let much_gas: InstanceOptions = InstanceOptions {
+        gas_limit: HIGH_GAS_LIMIT,
+        ..DEFAULT_INSTANCE_OPTIONS
+    };
+
+    let expected_uuid_original = Uuid::new_v5(&Uuid::NAMESPACE_OID, b"link14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sgf2vn8 12345 0").as_bytes()[0..16].to_vec();
+    let expected_uuid = Uuid::new_v5(&Uuid::NAMESPACE_OID, &[b"link14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9sgf2vn8".as_slice(), &12345u64.to_be_bytes(), &0u16.to_be_bytes()].concat()).as_bytes()[0..16].to_vec();
+
+    let mut instance = Instance::from_code(
+        BENCH_UUID,
+        mock_backend(&[]),
+        much_gas,
+        memory_limit,
+    ).unwrap();
+
+    call_instantiate::<_, _, _, Empty>(&mut instance, &mock_env(), &info, b"{}").unwrap();
+
+    let mut dummy: Vec<u8> = vec![];
+    let mut uuid_original: Vec<u8> = vec![];
+    let mut uuid_wasm: Vec<u8> = vec![];
+    let mut uuid_wasm_concat: Vec<u8> = vec![];
+    let mut uuid_api: Vec<u8> = vec![];
+    let mut uuid_api_concat: Vec<u8> = vec![];
+    let mut uuid_api_separate: Vec<u8> = vec![];
+    let mut gas_used_dummy = 0;
+    let mut gas_used_original = 0;
+    let mut gas_used_wasm = 0;
+    let mut gas_used_wasm_concat = 0;
+    let mut gas_used_api = 0;
+    let mut gas_used_api_separate = 0;
+    let mut gas_used_api_concat = 0;
+
+    group.bench_function(format!("without_uuid"), |b| {
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let result_ptr = instance.call_function1("make_deps_and_output", &[]).unwrap();
+            gas_used_dummy = gas_before - instance.get_gas_left();
+
+            dummy = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+            instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+        });
+    });
+
+    group.bench_function(format!("uuid_original"), |b| {
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let result_ptr = instance.call_function1("uuid_original", &[]).unwrap();
+            gas_used_original = gas_before - instance.get_gas_left();
+
+            if uuid_original.len() == 0 {
+                uuid_original = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+            }
+            instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+        });
+    });
+
+    let _ = instance.call_function0("do_init_seq", &[]);
+
+    group.bench_function(format!("uuid_api"), |b| {
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let result_ptr = instance.call_function1("uuid_api", &[]).unwrap();
+            gas_used_api = gas_before - instance.get_gas_left();
+
+            if uuid_api.len() == 0 {
+                uuid_api = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+            }
+            instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+        });
+    });
+
+    let _ = instance.call_function0("do_init_seq", &[]);
+
+    group.bench_function(format!("uuid_api_separate"), |b| {
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let result_ptr = instance.call_function1("uuid_api_separate", &[]).unwrap();
+            gas_used_api_separate = gas_before - instance.get_gas_left();
+
+            if uuid_api_separate.len() == 0 {
+                uuid_api_separate = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+            }
+            instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+        });
+    });
+
+    let _ = instance.call_function0("do_init_seq", &[]);
+
+    group.bench_function(format!("uuid_api_concat"), |b| {
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let result_ptr = instance.call_function1("uuid_api_concat", &[]).unwrap();
+            gas_used_api_concat = gas_before - instance.get_gas_left();
+
+            if uuid_api_concat.len() == 0 {
+                uuid_api_concat = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+            }
+            instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+        });
+    });
+
+    let _ = instance.call_function0("do_init_seq", &[]);
+
+    group.bench_function(format!("uuid_wasm"), |b| {
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let result_ptr = instance.call_function1("uuid_native", &[]).unwrap();
+            gas_used_wasm = gas_before - instance.get_gas_left();
+
+            if uuid_wasm.len() == 0 {
+                uuid_wasm = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+            }
+            instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+        });
+    });
+
+    let _ = instance.call_function0("do_init_seq", &[]);
+
+    group.bench_function(format!("uuid_wasm_concat"), |b| {
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let result_ptr = instance.call_function1("uuid_native_concat", &[]).unwrap();
+            gas_used_wasm_concat = gas_before - instance.get_gas_left();
+
+            if uuid_wasm_concat.len() == 0 {
+                uuid_wasm_concat = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+            }
+            instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+        });
+    });
+
+    println!("Gas used for dummy: {}", insert_comma(gas_used_dummy));
+    println!("Gas used for original: {}", insert_comma(gas_used_original));
+    println!("Gas used for api: {}", insert_comma(gas_used_api));
+    println!("Gas used for api separate: {}", insert_comma(gas_used_api_separate));
+    println!("Gas used for api concat: {}", insert_comma(gas_used_api_concat));
+    println!("Gas used for wasm: {}", insert_comma(gas_used_wasm));
+    println!("Gas used for wasm concat: {}", insert_comma(gas_used_wasm_concat));
+
+    assert_eq!(expected_uuid_original, uuid_original);
+    assert_eq!(expected_uuid_original, uuid_api);
+    assert_eq!(expected_uuid, uuid_wasm);
+    assert_eq!(expected_uuid, uuid_api_separate);
+    assert_eq!(expected_uuid, uuid_api_concat);
+    assert_eq!(expected_uuid, uuid_wasm_concat);
+    println!("asserts have done");
+}
+
+fn bench_sha1(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sha-1");
+
+    let (_, memory_limit) = mock_instance_options();
+    let info = mock_info("creator", &coins(1000, "earth"));
+    let much_gas: InstanceOptions = InstanceOptions {
+        gas_limit: HIGH_GAS_LIMIT,
+        ..DEFAULT_INSTANCE_OPTIONS
+    };
+
+    for i in 1..50 {
+        let mut instance = Instance::from_code(
+            BENCH_SHA1,
+            mock_backend(&[]),
+            much_gas,
+            memory_limit,
+        ).unwrap();
+
+        let pre = "x".repeat(i);
+        let msg = format!(r#"{{"pre":"{} "}}"#, pre);
+        let bytes = b"12345678901234";
+        let len = [format!("{} ", pre).as_bytes(), bytes].concat().len();
+
+        call_instantiate::<_, _, _, Empty>(&mut instance, &mock_env(), &info, msg.as_bytes()).unwrap();
+
+        let mut dummy: Vec<u8> = vec![];
+        let mut wasm_sha1: Vec<u8> = vec![];
+        let mut api_sha1: Vec<u8> = vec![];
+        let mut gas_used_dummy = 0;
+        let mut gas_used_wasm = 0;
+        let mut gas_used_wasm_twice = 0;
+        let mut gas_used_api = 0;
+        let mut gas_used_api_twice = 0;
+
+        group.bench_function(format!("{}_without_sha1", len), |b| {
+            b.iter(|| {
+                let ptr = instance.allocate(bytes.len()).unwrap();
+                instance.write_memory(ptr, bytes).unwrap();
+
+                let gas_before = instance.get_gas_left();
+                let result_ptr = instance.call_function1("make_deps_read_input_write_output", &[ptr.into()]).unwrap();
+                gas_used_dummy = gas_before - instance.get_gas_left();
+
+                dummy = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+                instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+            });
+        });
+
+        group.bench_function(format!("{}_wasm_sha1", len), |b| {
+            b.iter(|| {
+                let ptr = instance.allocate(bytes.len()).unwrap();
+                instance.write_memory(ptr, bytes).unwrap();
+
+                let gas_before = instance.get_gas_left();
+                let result_ptr = instance.call_function1("sha1_raw", &[ptr.into()]).unwrap();
+                gas_used_wasm = gas_before - instance.get_gas_left();
+
+                wasm_sha1 = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+                instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+            });
+        });
+
+        group.bench_function(format!("{}_wasm_sha1_twice", len), |b| {
+            b.iter(|| {
+                let ptr = instance.allocate(bytes.len()).unwrap();
+                instance.write_memory(ptr, bytes).unwrap();
+
+                let gas_before = instance.get_gas_left();
+                let result_ptr = instance.call_function1("sha1_raw_twice", &[ptr.into()]).unwrap();
+                gas_used_wasm_twice = gas_before - instance.get_gas_left();
+
+                wasm_sha1 = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+                instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+            });
+        });
+
+        group.bench_function(format!("{}_api_sha1", len), |b| {
+            b.iter(|| {
+                let ptr = instance.allocate(bytes.len()).unwrap();
+                instance.write_memory(ptr, bytes).unwrap();
+
+                let gas_before = instance.get_gas_left();
+                let result_ptr = instance.call_function1("sha1_api", &[ptr.into()]).unwrap();
+                gas_used_api = gas_before - instance.get_gas_left();
+
+                api_sha1 = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+                instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+            });
+        });
+
+        group.bench_function(format!("{}_api_sha1_twice", len), |b| {
+            b.iter(|| {
+                let ptr = instance.allocate(bytes.len()).unwrap();
+                instance.write_memory(ptr, bytes).unwrap();
+
+                let gas_before = instance.get_gas_left();
+                let result_ptr = instance.call_function1("sha1_api_twice", &[ptr.into()]).unwrap();
+                gas_used_api_twice = gas_before - instance.get_gas_left();
+
+                api_sha1 = instance.read_memory(result_ptr.unwrap_i32() as u32, 16).unwrap();
+                instance.deallocate(result_ptr.unwrap_i32() as u32).unwrap();
+            });
+        });
+
+        println!("Gas used for {}bytes/dummy: {}", len, insert_comma(gas_used_dummy));
+        println!("Gas used for {}bytes/wasm: {}", len, insert_comma(gas_used_wasm));
+        println!("Gas used for {}bytes/wasm_twice: {}", len, insert_comma(gas_used_wasm_twice));
+        println!("Gas used for {}bytes/api: {}", len, insert_comma(gas_used_api));
+        println!("Gas used for {}bytes/api_twice: {}", len, insert_comma(gas_used_api_twice));
+
+        assert_eq!(wasm_sha1, api_sha1);
+    }
+}
+
 fn make_config() -> Criterion {
     Criterion::default()
         .without_plots()
@@ -338,4 +623,15 @@ criterion_group!(
         .configure_from_args();
     targets = bench_instance_threads
 );
-criterion_main!(instance, cache, multi_threaded_instance);
+criterion_group!(
+    name = sha1;
+    config = make_config();
+    targets = bench_sha1
+);
+criterion_group!(
+    name = uuid;
+    config = make_config();
+    targets = bench_uuid
+);
+
+criterion_main!(uuid);

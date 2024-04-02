@@ -8,8 +8,8 @@ use super::storage::MockStorage;
 use crate::{Backend, BackendApi, BackendError, BackendResult, GasInfo};
 
 pub const MOCK_CONTRACT_ADDR: &str = "cosmos2contract";
-const DEFAULT_GAS_COST_HUMANIZE: u64 = 44;
-const DEFAULT_GAS_COST_CANONICALIZE: u64 = 55;
+const DEFAULT_GAS_COST_HUMANIZE: u64 = 140_000_000 * 5;
+const DEFAULT_GAS_COST_CANONICALIZE: u64 = 140_000_000 * 4;
 
 /// All external requirements that can be injected for unit tests.
 /// It sets the given balance for the contract itself, nothing else

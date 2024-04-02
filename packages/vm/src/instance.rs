@@ -333,7 +333,7 @@ where
 
     /// Requests memory allocation by the instance and returns a pointer
     /// in the Wasm address space to the created Region object.
-    pub(crate) fn allocate(&mut self, size: usize) -> VmResult<u32> {
+    pub fn allocate(&mut self, size: usize) -> VmResult<u32> {
         let ret = self.call_function1("allocate", &[to_u32(size)?.into()])?;
         let ptr = ref_to_u32(&ret)?;
         if ptr == 0 {
@@ -345,31 +345,31 @@ where
     // deallocate frees memory in the instance and that was either previously
     // allocated by us, or a pointer from a return value after we copy it into rust.
     // we need to clean up the wasm-side buffers to avoid memory leaks
-    pub(crate) fn deallocate(&mut self, ptr: u32) -> VmResult<()> {
+    pub fn deallocate(&mut self, ptr: u32) -> VmResult<()> {
         self.call_function0("deallocate", &[ptr.into()])?;
         Ok(())
     }
 
     /// Copies all data described by the Region at the given pointer from Wasm to the caller.
-    pub(crate) fn read_memory(&self, region_ptr: u32, max_length: usize) -> VmResult<Vec<u8>> {
+    pub fn read_memory(&self, region_ptr: u32, max_length: usize) -> VmResult<Vec<u8>> {
         read_region(&self.env.memory(), region_ptr, max_length)
     }
 
     /// Copies data to the memory region that was created before using allocate.
-    pub(crate) fn write_memory(&mut self, region_ptr: u32, data: &[u8]) -> VmResult<()> {
+    pub fn write_memory(&mut self, region_ptr: u32, data: &[u8]) -> VmResult<()> {
         write_region(&self.env.memory(), region_ptr, data)?;
         Ok(())
     }
 
     /// Calls a function exported by the instance.
     /// The function is expected to return no value. Otherwise this calls errors.
-    pub(crate) fn call_function0(&self, name: &str, args: &[Val]) -> VmResult<()> {
+    pub fn call_function0(&self, name: &str, args: &[Val]) -> VmResult<()> {
         self.env.call_function0(name, args)
     }
 
     /// Calls a function exported by the instance.
     /// The function is expected to return one value. Otherwise this calls errors.
-    pub(crate) fn call_function1(&self, name: &str, args: &[Val]) -> VmResult<Val> {
+    pub fn call_function1(&self, name: &str, args: &[Val]) -> VmResult<Val> {
         self.env.call_function1(name, args)
     }
 }

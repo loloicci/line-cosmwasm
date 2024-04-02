@@ -74,6 +74,7 @@ wat = "1.0"
 clap = "2.33.3"
 rand = "0.8"
 leb128 = "0.2"
+uuid = { version = "1.8.0", features = ["v5", "serde"] }
 
 [[bench]]
 name = "main"

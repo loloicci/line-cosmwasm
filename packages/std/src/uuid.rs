@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::str::FromStr;
 use uuid as raw_uuid;
+use sha1::{Digest, Sha1};
 
 use crate::{from_slice, to_vec};
 use crate::{Api, Env, StdResult, Storage};
@@ -19,11 +20,48 @@ impl Uuid {
         &self.as_bytes()[0..16]
     }
 
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.as_bytes()[0..16].to_vec()
+    }
+
     // Port the new_v5 implementation of uuid to use deps.api
     // https://github.com/uuid-rs/uuid/blob/2d6c147bdfca9612263dd7e82e26155f7ef8bf32/src/v5.rs#L33
-    fn new_v5(api: &dyn Api, namespace: &Uuid, name: &[u8]) -> StdResult<Self> {
+    fn new_v5_original(api: &dyn Api, namespace: &Uuid, name: &[u8]) -> StdResult<Self> {
         let inputs = [namespace.as_bytes(), name];
         let buffer = api.sha1_calculate(&inputs)?;
+
+        let mut bytes = raw_uuid::Bytes::default();
+        bytes.copy_from_slice(&buffer[..16]);
+        let mut builder = raw_uuid::Builder::from_bytes(bytes);
+        builder
+            .set_variant(raw_uuid::Variant::RFC4122)
+            .set_version(raw_uuid::Version::Sha1);
+
+        Ok(Uuid(builder.into_uuid()))
+    }
+
+    fn new_v5_api(api: &dyn Api, namespace: &Uuid, names: &[&[u8]]) -> StdResult<Self> {
+        let inputs: &[&[u8]] = &[&[&namespace.as_bytes()[..]], names].concat();
+        let buffer = api.sha1_calculate(inputs)?;
+
+        let mut bytes = raw_uuid::Bytes::default();
+        bytes.copy_from_slice(&buffer[..16]);
+        let mut builder = raw_uuid::Builder::from_bytes(bytes);
+        builder
+            .set_variant(raw_uuid::Variant::RFC4122)
+            .set_version(raw_uuid::Version::Sha1);
+
+        Ok(Uuid(builder.into_uuid()))
+    }
+
+    fn new_v5_native(namespace: &Uuid, names: &[&[u8]]) -> StdResult<Self> {
+        let mut hasher = Sha1::new();
+
+        hasher.update(namespace.as_bytes());
+        for name in names {
+            hasher.update(name);
+        }
+        let buffer = hasher.finalize();
 
         let mut bytes = raw_uuid::Bytes::default();
         bytes.copy_from_slice(&buffer[..16]);
@@ -38,7 +76,7 @@ impl Uuid {
 
 const CONTRACT_UUID_SEQ_NUM_KEY: &[u8] = b"contract_uuid_seq_num";
 
-pub fn new_uuid(env: &Env, storage: &mut dyn Storage, api: &dyn Api) -> StdResult<Uuid> {
+pub fn new_uuid_original(env: &Env, storage: &mut dyn Storage, api: &dyn Api) -> StdResult<Uuid> {
     let raw_seq_num = storage.get(CONTRACT_UUID_SEQ_NUM_KEY);
     let seq_num: u16 = match raw_seq_num {
         Some(data) => from_slice(&data).unwrap(),
@@ -47,12 +85,99 @@ pub fn new_uuid(env: &Env, storage: &mut dyn Storage, api: &dyn Api) -> StdResul
     let next_seq_num: u16 = seq_num.wrapping_add(1);
 
     let uuid_name = format!("{} {} {}", env.contract.address, env.block.height, seq_num);
+
     storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
 
-    Uuid::new_v5(
+    Uuid::new_v5_original(
         api,
         &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
-        uuid_name.as_bytes(),
+        &uuid_name.as_bytes(),
+    )
+}
+
+pub fn new_uuid_api(env: &Env, storage: &mut dyn Storage, api: &dyn Api) -> StdResult<Uuid> {
+    let raw_seq_num = storage.get(CONTRACT_UUID_SEQ_NUM_KEY);
+    let seq_num: u16 = match raw_seq_num {
+        Some(data) => from_slice(&data).unwrap(),
+        None => 0,
+    };
+    let next_seq_num: u16 = seq_num.wrapping_add(1);
+
+    let uuid_name = format!("{} {} {}", env.contract.address, env.block.height, seq_num);
+
+    storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
+
+    Uuid::new_v5_api(
+        api,
+        &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
+        &[&uuid_name.as_bytes()],
+    )
+}
+
+pub fn new_uuid_api_separate(env: &Env, storage: &mut dyn Storage, api: &dyn Api) -> StdResult<Uuid> {
+    let raw_seq_num = storage.get(CONTRACT_UUID_SEQ_NUM_KEY);
+    let seq_num: u16 = match raw_seq_num {
+        Some(data) => from_slice(&data).unwrap(),
+        None => 0,
+    };
+    let next_seq_num: u16 = seq_num.wrapping_add(1);
+
+    let uuid_names = &[env.contract.address.as_bytes(), &env.block.height.to_be_bytes(), &seq_num.to_be_bytes()];
+    storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
+
+    Uuid::new_v5_api(
+        api,
+        &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
+        uuid_names,
+    )
+}
+
+pub fn new_uuid_api_concat(env: &Env, storage: &mut dyn Storage, api: &dyn Api) -> StdResult<Uuid> {
+    let raw_seq_num = storage.get(CONTRACT_UUID_SEQ_NUM_KEY);
+    let seq_num: u16 = match raw_seq_num {
+        Some(data) => from_slice(&data).unwrap(),
+        None => 0,
+    };
+    let next_seq_num: u16 = seq_num.wrapping_add(1);
+    let uuid_name = &[env.contract.address.as_bytes(), &env.block.height.to_be_bytes(), &seq_num.to_be_bytes()].concat();
+    storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
+
+    Uuid::new_v5_original(
+        api,
+        &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
+        &uuid_name,
+    )
+}
+
+pub fn new_uuid_native(env: &Env, storage: &mut dyn Storage) -> StdResult<Uuid> {
+    let raw_seq_num = storage.get(CONTRACT_UUID_SEQ_NUM_KEY);
+    let seq_num: u16 = match raw_seq_num {
+        Some(data) => from_slice(&data).unwrap(),
+        None => 0,
+    };
+    let next_seq_num: u16 = seq_num.wrapping_add(1);
+    let uuid_names = &[env.contract.address.as_bytes(), &env.block.height.to_be_bytes(), &seq_num.to_be_bytes()];
+    storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
+
+    Uuid::new_v5_native(
+        &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
+        uuid_names,
+    )
+}
+
+pub fn new_uuid_native_concat(env: &Env, storage: &mut dyn Storage) -> StdResult<Uuid> {
+    let raw_seq_num = storage.get(CONTRACT_UUID_SEQ_NUM_KEY);
+    let seq_num: u16 = match raw_seq_num {
+        Some(data) => from_slice(&data).unwrap(),
+        None => 0,
+    };
+    let next_seq_num: u16 = seq_num.wrapping_add(1);
+    let uuid_name = &[env.contract.address.as_bytes(), &env.block.height.to_be_bytes(), &seq_num.to_be_bytes()].concat();
+    storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
+
+    Uuid::new_v5_native(
+        &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
+        &[uuid_name],
     )
 }
 
