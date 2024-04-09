@@ -216,8 +216,8 @@ impl Api for MockApi {
         )?)
     }
 
-    fn sha1_calculate(&self, inputs: &[&[u8]]) -> Result<[u8; 20], HashCalculationError> {
-        Ok(cosmwasm_crypto::sha1_calculate(inputs)?)
+    fn sha1_calculate(&self, input: &[u8]) -> Result<[u8; 20], HashCalculationError> {
+        Ok(cosmwasm_crypto::sha1_calculate(input)?)
     }
 
     fn debug(&self, message: &str) {

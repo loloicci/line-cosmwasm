@@ -2,11 +2,9 @@ use sha1::{Digest, Sha1};
 
 use crate::errors::CryptoResult;
 
-pub fn sha1_calculate(hash_inputs: &[&[u8]]) -> CryptoResult<[u8; 20]> {
+pub fn sha1_calculate(message: &[u8]) -> CryptoResult<[u8; 20]> {
     let mut hasher = Sha1::new();
-    for &hash_input in hash_inputs.iter() {
-        hasher.update(hash_input);
-    }
+    hasher.update(message);
     let buffer: [u8; 20] = hasher.finalize().into();
     Ok(buffer)
 }
@@ -14,13 +12,15 @@ pub fn sha1_calculate(hash_inputs: &[&[u8]]) -> CryptoResult<[u8; 20]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hex;
 
     #[test]
     fn test_sha1_calculate() {
-        let input1: &str = "input_data1";
-        let input2: &str = "input_data2";
-        let inputs = &[input1.as_bytes(), input2.as_bytes()];
-        let calc_result = sha1_calculate(inputs).unwrap();
-        assert_eq!(20, calc_result.len())
+        let message = b"The quick brown fox jumps over the lazy dog";
+        let result = sha1_calculate(message).unwrap();
+        assert_eq!(
+            result.to_vec(),
+            hex::decode("2fd4e1c67a2d28fced849ee1bb76e7391b93eb12").unwrap()
+        )
     }
 }

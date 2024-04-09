@@ -22,8 +22,8 @@ impl Uuid {
     // Port the new_v5 implementation of uuid to use deps.api
     // https://github.com/uuid-rs/uuid/blob/2d6c147bdfca9612263dd7e82e26155f7ef8bf32/src/v5.rs#L33
     fn new_v5(api: &dyn Api, namespace: &Uuid, name: &[u8]) -> StdResult<Self> {
-        let inputs = [namespace.as_bytes(), name];
-        let buffer = api.sha1_calculate(&inputs)?;
+        let message = [namespace.as_bytes(), name].concat();
+        let buffer = api.sha1_calculate(&message)?;
 
         let mut bytes = raw_uuid::Bytes::default();
         bytes.copy_from_slice(&buffer[..16]);

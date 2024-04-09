@@ -68,7 +68,7 @@ extern "C" {
     /// Returns 0 on verification success, 1 on verification failure, and values
     /// greater than 1 in case of error.
     fn ed25519_batch_verify(messages_ptr: u32, signatures_ptr: u32, public_keys_ptr: u32) -> u32;
-    fn sha1_calculate(inputs_ptr: u32) -> u64;
+    fn sha1_calculate(input_ptr: u32) -> u64;
 
     /// Writes a debug message (UFT-8 encoded) to the host for debugging purposes.
     /// The host is free to log or process this in any way it considers appropriate.
@@ -360,12 +360,11 @@ impl Api for ExternalApi {
         }
     }
 
-    fn sha1_calculate(&self, inputs: &[&[u8]]) -> Result<[u8; 20], HashCalculationError> {
-        let inputs_encoded = encode_sections(inputs);
-        let inputs_send = build_region(&inputs_encoded);
-        let inputs_send_ptr = &*inputs_send as *const Region as u32;
+    fn sha1_calculate(&self, input: &[u8]) -> Result<[u8; 20], HashCalculationError> {
+        let input_send = build_region(&input);
+        let input_send_ptr = &*input_send as *const Region as u32;
 
-        let result = unsafe { sha1_calculate(inputs_send_ptr) };
+        let result = unsafe { sha1_calculate(input_send_ptr) };
         let error_code = from_high_half(result);
         let hash_ptr = from_low_half(result);
         match error_code {
