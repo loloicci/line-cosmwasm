@@ -109,15 +109,11 @@ fn bench_crypto(c: &mut Criterion) {
     });
 
     for i in 1..(512 * 1024 / 8 / 64) {
-        // 56bytes takes twice time than 55bytes.
-        // 119bytes takes time equals to 56bytes,
-        // and 120 bytes takes 3/2 time than 119bytes.
-        // This is because every 64 bytes needs a hassing
-        // and there are 8 bytes header (message length) and 1 byte tail
-        // (EOF).
+        // Every 64 bytes needs a hassing and there are
+        // 8 bytes header (message length) and 1 byte tail (EOF).
         let len = i * 64 - 9;
         if i > 64 && i % 64 != 0 {
-            continue
+            continue;
         };
         group.bench_function(format!("sha1_calculate_{}byte", len), |b| {
             let mut message: Vec<u8> = vec![];

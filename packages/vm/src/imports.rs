@@ -368,7 +368,19 @@ pub fn do_sha1_calculate<A: BackendApi, S: Storage, Q: Querier>(
     )?;
 
     let result = sha1_calculate(&message_input);
-    let gas_cost = env.gas_config.sha1_calculate_cost;
+
+    // 1 block = 64bytes.
+    // and (message length + 9) bytes is inputed to hasher.
+    let block_length = (message_input.len() as u64 + 8) / 64 + 1;
+
+    // This comes from benchmark.
+    // more than 1 block, it is in direct propotion to the block length.
+    // hashing 1 block takes 7/4 times of time for a block cost.
+    let gas_cost = if block_length == 1 {
+        env.gas_config.sha1_calculate_block_cost * 7 / 4
+    } else {
+        env.gas_config.sha1_calculate_block_cost * block_length
+    };
     let gas_info = GasInfo::with_cost(gas_cost);
     process_gas_info::<A, S, Q>(env, gas_info)?;
     match result {
