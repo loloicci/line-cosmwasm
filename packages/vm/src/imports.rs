@@ -55,7 +55,7 @@ const MAX_COUNT_ED25519_BATCH: usize = 256;
 /// After executing the crypto bench according to this,
 /// the gas factor is determined based on the result.
 /// If you modify this value, you need to adjust the gas factor.
-pub const MAX_LENGTH_SHA1_MESSAGE: usize = 512 * 512;
+pub const MAX_LENGTH_SHA1_MESSAGE: usize = 512 / 8 * 1024;
 
 /// Max length for a debug message
 const MAX_LENGTH_DEBUG: usize = 2 * MI;

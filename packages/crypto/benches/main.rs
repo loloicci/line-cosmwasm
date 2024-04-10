@@ -75,8 +75,6 @@ fn read_decode_cosmos_sigs() -> (Vec<Vec<u8>>, Vec<Vec<u8>>, Vec<Vec<u8>>) {
 }
 
 fn bench_crypto(c: &mut Criterion) {
-    // same as vm::imports::MAX_LENGTH_SHA1_MESSAGE (=80)
-    const MAX_LENGTH_SHA1_MESSAGE: usize = 80;
     let mut group = c.benchmark_group("Crypto");
 
     group.bench_function("secp256k1_verify", |b| {
@@ -110,32 +108,25 @@ fn bench_crypto(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("sha1_calculate_one", |b| {
-        let inputs: Vec<&[u8]> = vec![&[0; MAX_LENGTH_SHA1_MESSAGE]];
-        b.iter(|| {
-            let hash = sha1_calculate(&inputs).unwrap();
-            assert_eq!(hash.len(), 20);
+    for i in 1..(512 * 1024 / 8 / 64) {
+        // 56bytes takes twice time than 55bytes.
+        // 119bytes takes time equals to 56bytes,
+        // and 120 bytes takes 3/2 time than 119bytes.
+        // This is because every 64 bytes needs a hassing
+        // and there are 8 bytes header (message length) and 1 byte tail
+        // (EOF).
+        let len = i * 64 - 9;
+        if i > 64 && i % 64 != 0 {
+            continue
+        };
+        group.bench_function(format!("sha1_calculate_{}byte", len), |b| {
+            let mut message: Vec<u8> = vec![];
+            message.resize(len, 42);
+            b.iter(|| {
+                let _ = sha1_calculate(&message).unwrap();
+            });
         });
-    });
-    group.bench_function("sha1_calculate_two", |b| {
-        let inputs: Vec<&[u8]> = vec![&[0; MAX_LENGTH_SHA1_MESSAGE], &[1; MAX_LENGTH_SHA1_MESSAGE]];
-        b.iter(|| {
-            let hash = sha1_calculate(&inputs).unwrap();
-            assert_eq!(hash.len(), 20);
-        });
-    });
-    group.bench_function("sha1_calculate_four", |b| {
-        let inputs: Vec<&[u8]> = vec![
-            &[0; MAX_LENGTH_SHA1_MESSAGE],
-            &[1; MAX_LENGTH_SHA1_MESSAGE],
-            &[2; MAX_LENGTH_SHA1_MESSAGE],
-            &[3; MAX_LENGTH_SHA1_MESSAGE],
-        ];
-        b.iter(|| {
-            let hash = sha1_calculate(&inputs).unwrap();
-            assert_eq!(hash.len(), 20);
-        });
-    });
+    }
 
     group.bench_function("ed25519_verify", |b| {
         let message = hex::decode(COSMOS_ED25519_MSG_HEX).unwrap();

@@ -7,6 +7,7 @@ on:
       - main
       - /^[0-9]+\.[0-9]+$/
       # 👇Add your branch here if benchmarking matters to your work
+      - improve-and-bench-uuid
 
 jobs:
   benchmarking:
