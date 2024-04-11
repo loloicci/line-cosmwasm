@@ -1,4 +1,6 @@
-use criterion::{criterion_group, criterion_main, Criterion, PlottingBackend};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, PlottingBackend, Throughput};
+use criterion::measurement::Measurement;
+use criterion_inverted_throughput::InvertedThroughput;
 use std::time::Duration;
 
 use english_numbers::convert_no_fmt;
@@ -108,22 +110,6 @@ fn bench_crypto(c: &mut Criterion) {
         });
     });
 
-    for i in 1..(512 * 1024 / 8 / 64) {
-        // Every 64 bytes needs a hassing and there are
-        // 8 bytes header (message length) and 1 byte tail (EOF).
-        let len = i * 64 - 9;
-        if i > 64 && i % 64 != 0 {
-            continue;
-        };
-        group.bench_function(format!("sha1_calculate_{}byte", len), |b| {
-            let mut message: Vec<u8> = vec![];
-            message.resize(len, 42);
-            b.iter(|| {
-                let _ = sha1_calculate(&message).unwrap();
-            });
-        });
-    }
-
     group.bench_function("ed25519_verify", |b| {
         let message = hex::decode(COSMOS_ED25519_MSG_HEX).unwrap();
         let signature = hex::decode(COSMOS_ED25519_SIGNATURE_HEX).unwrap();
@@ -191,8 +177,40 @@ fn bench_crypto(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_sha1<M: Measurement>(c: &mut Criterion<M>) {
+    let mut group = c.benchmark_group("sha1");
+
+    for i in 1..(512 * 1024 / 8 / 64) {
+        // Every 64 bytes needs a hassing and there are
+        // 8 bytes header (message length) and 1 byte tail (EOF).
+        let len = i * 64 - 9;
+        if i > 32 && i % 128 != 0 {
+            continue;
+        };
+        group.throughput(Throughput::Elements(i as u64));
+        let mut message: Vec<u8> = vec![];
+        message.resize(len, 42);
+        group.bench_with_input(BenchmarkId::new("blocks", i), &message, |b, msg| {
+            b.iter(|| {
+                let _ = sha1_calculate(msg).unwrap();
+            });
+        });
+    }
+
+    group.finish();
+}
+
 fn make_config() -> Criterion {
     Criterion::default()
+        .plotting_backend(PlottingBackend::Plotters)
+        .without_plots()
+        .measurement_time(Duration::new(10, 0))
+        .sample_size(12)
+}
+
+fn make_inversion_throughput_config() -> Criterion<InvertedThroughput> {
+    Criterion::default()
+        .with_measurement(InvertedThroughput::new())
         .plotting_backend(PlottingBackend::Plotters)
         .without_plots()
         .measurement_time(Duration::new(10, 0))
@@ -204,4 +222,9 @@ criterion_group!(
     config = make_config();
     targets = bench_crypto
 );
-criterion_main!(crypto);
+criterion_group!(
+    name = sha1;
+    config = make_inversion_throughput_config();
+    targets = bench_sha1
+);
+criterion_main!(crypto, sha1);

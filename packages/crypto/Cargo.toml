@@ -27,7 +27,8 @@ thiserror = "1.0.13"
 sha-1 = "0.9.8"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.5.1"
+criterion-inverted-throughput = "0.1.0"
 serde = { version = "1.0.103", default-features = false, features = ["derive", "alloc"] }
 serde_json = "1.0.40"
 sha2 = "0.10"
