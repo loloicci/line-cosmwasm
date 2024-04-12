@@ -1,0 +1,9 @@
+[package]
+name = "sha1-line-reg"
+version = "0.1.0"
+edition = "2021"
+authors = ["loloicci <loloicci@loloicci.dev>"]
+
+[dependencies]
+regex = "1.10.4"
+linreg = "0.2.0"

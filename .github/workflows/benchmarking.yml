@@ -17,6 +17,7 @@ jobs:
     env:
       RUST_BACKTRACE: 1
       working-directory: ./packages/
+      devtools-directory: ./devtools/
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -39,7 +40,10 @@ jobs:
         run: cargo bench --no-default-features -- --color never --save-baseline singlepass
       - name: Run crypto benchmarks
         working-directory: ${{env.working-directory}}/crypto
-        run: cargo bench -- --color never --save-baseline crypto
+        run: cargo bench -- --color never --save-baseline crypto | tee ~/crypto-bench-result
+      - name: Linear Regression Sha1
+        working-directory: ${{env.devtools-directory}}/sha1-line-reg
+        run: cat ~/crypto-bench-result | cargo run
 
   package_crypto:
     name: package_crypto
