@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 use std::str::FromStr;
 use uuid as raw_uuid;
+use sha1::{Sha1, Digest};
 
 use crate::{from_slice, to_vec};
 use crate::{Api, Env, StdResult, Storage};
@@ -34,6 +35,22 @@ impl Uuid {
 
         Ok(Uuid(builder.into_uuid()))
     }
+
+    fn new_v5_native(namespace: &Uuid, name: &[u8]) -> StdResult<Self> {
+        let message = [namespace.as_bytes(), name].concat();
+        let mut hasher = Sha1::new();
+        hasher.update(message);
+        let buffer = hasher.finalize();
+
+        let mut bytes = raw_uuid::Bytes::default();
+        bytes.copy_from_slice(&buffer[..16]);
+        let mut builder = raw_uuid::Builder::from_bytes(bytes);
+        builder
+            .set_variant(raw_uuid::Variant::RFC4122)
+            .set_version(raw_uuid::Version::Sha1);
+
+        Ok(Uuid(builder.into_uuid()))
+    }
 }
 
 const CONTRACT_UUID_SEQ_NUM_KEY: &[u8] = b"contract_uuid_seq_num";
@@ -45,14 +62,29 @@ pub fn new_uuid(env: &Env, storage: &mut dyn Storage, api: &dyn Api) -> StdResul
         None => 0,
     };
     let next_seq_num: u16 = seq_num.wrapping_add(1);
-
-    let uuid_name = format!("{} {} {}", env.contract.address, env.block.height, seq_num);
+    let uuid_name = &[env.contract.address.as_bytes(), &env.block.height.to_be_bytes(), &seq_num.to_be_bytes()].concat();
     storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
 
     Uuid::new_v5(
         api,
         &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
-        uuid_name.as_bytes(),
+        uuid_name
+    )
+}
+
+pub fn new_uuid_native(env: &Env, storage: &mut dyn Storage) -> StdResult<Uuid> {
+    let raw_seq_num = storage.get(CONTRACT_UUID_SEQ_NUM_KEY);
+    let seq_num: u16 = match raw_seq_num {
+        Some(data) => from_slice(&data).unwrap(),
+        None => 0,
+    };
+    let next_seq_num: u16 = seq_num.wrapping_add(1);
+    let uuid_name = &[env.contract.address.as_bytes(), &env.block.height.to_be_bytes(), &seq_num.to_be_bytes()].concat();
+    storage.set(CONTRACT_UUID_SEQ_NUM_KEY, &(to_vec(&next_seq_num).unwrap()));
+
+    Uuid::new_v5_native(
+        &Uuid(raw_uuid::Uuid::NAMESPACE_OID),
+        uuid_name
     )
 }
 
@@ -90,17 +122,12 @@ mod tests {
         let api = MockApi::default();
         let mut storage = MockStorage::new();
 
-        let uuid = new_uuid(&env, &mut storage, &api).unwrap();
+        let uuid1 = new_uuid(&env, &mut storage, &api).unwrap();
         let uuid2 = new_uuid(&env, &mut storage, &api).unwrap();
 
-        assert_eq!(uuid.to_string(), "417d3461-5f6c-584b-8035-482a70997aee");
-        assert_eq!(uuid.get_variant(), uuid::Variant::RFC4122);
-        assert_eq!(uuid.get_version(), Some(uuid::Version::Sha1));
-        let parsed_uuid = Uuid::from_str("417d3461-5f6c-584b-8035-482a70997aee");
-        assert_eq!(uuid, parsed_uuid.unwrap());
-
-        assert_eq!(uuid2.to_string(), "61b5574c-d3e4-5d06-8a87-ab28a7353dfd");
-        assert_ne!(uuid, uuid2);
+        assert_eq!(uuid1.get_variant(), uuid::Variant::RFC4122);
+        assert_eq!(uuid1.get_version(), Some(uuid::Version::Sha1));
+        assert_ne!(uuid1, uuid2);
     }
 
     #[test]
@@ -110,8 +137,8 @@ mod tests {
         let mut storage = MockStorage::new();
         let our_uuid = new_uuid(&env, &mut storage, &api).unwrap();
 
-        let uuid_name = format!("{} {} {}", env.contract.address, env.block.height, 0);
-        let raw = raw_uuid::Uuid::new_v5(&raw_uuid::Uuid::NAMESPACE_OID, uuid_name.as_bytes());
+        let uuid_name = &[env.contract.address.as_bytes(), &env.block.height.to_be_bytes(), &0u16.to_be_bytes()].concat();
+        let raw = raw_uuid::Uuid::new_v5(&raw_uuid::Uuid::NAMESPACE_OID, uuid_name);
 
         assert_eq!(our_uuid.to_string(), raw.to_string());
     }

@@ -1,5 +1,7 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, PlottingBackend, Throughput};
 use criterion::measurement::Measurement;
+use criterion::{
+    criterion_group, criterion_main, BenchmarkId, Criterion, PlottingBackend, Throughput,
+};
 use criterion_inverted_throughput::InvertedThroughput;
 use std::time::Duration;
 

@@ -1,4 +1,8 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{
+    black_box, criterion_group, criterion_main, measurement::Measurement, BenchmarkId, Criterion,
+    Throughput,
+};
+use criterion_inverted_throughput::InvertedThroughput;
 
 use rand::Rng;
 use std::sync::Arc;
@@ -32,6 +36,8 @@ const INSTANTIATION_THREADS: usize = 128;
 const CONTRACTS: u64 = 10;
 
 static CONTRACT: &[u8] = include_bytes!("../testdata/hackatom.wasm");
+static CONTRACT_SHA1: &[u8] = include_bytes!("../testdata/bench_sha1.wasm");
+static CONTRACT_UUID: &[u8] = include_bytes!("../testdata/bench_uuid.wasm");
 
 fn bench_instance(c: &mut Criterion) {
     let mut group = c.benchmark_group("Instance");
@@ -311,8 +317,172 @@ pub fn bench_instance_threads(c: &mut Criterion) {
     });
 }
 
+fn bench_sha1<M: Measurement>(c: &mut Criterion<M>) {
+    let mut group = c.benchmark_group("sha1");
+
+    // bytes, blocks, used_gas
+    let mut gas_reports_wasm: Vec<(u64, u64, u64)> = vec![];
+    let mut gas_reports_api: Vec<(u64, u64, u64)> = vec![];
+
+    for i in 6..17 {
+        // Every 64 bytes needs a hassing and there are
+        // 8 bytes header (message length) and 1 byte tail (EOF).
+        let len = u64::pow(2, i) - 9;
+        let block = (len + 9) / 64;
+        group.throughput(Throughput::Elements(block));
+        group.bench_function(BenchmarkId::new("WASM/blocks", block), |b| {
+            let backend = mock_backend(&[]);
+            let much_gas: InstanceOptions = InstanceOptions {
+                gas_limit: HIGH_GAS_LIMIT,
+                ..DEFAULT_INSTANCE_OPTIONS
+            };
+            let mut instance =
+                Instance::from_code(CONTRACT_SHA1, backend, much_gas, Some(DEFAULT_MEMORY_LIMIT))
+                    .unwrap();
+
+            let info = mock_info("creator", &coins(1000, "earth"));
+            let msg = br#"{}"#;
+            let contract_result =
+                call_instantiate::<_, _, _, Empty>(&mut instance, &mock_env(), &info, msg).unwrap();
+            contract_result.into_result().unwrap();
+
+            let mut gas_used = 0;
+            b.iter(|| {
+                let gas_before = instance.get_gas_left();
+                let info = mock_info("foo", &[]);
+                let msg = format!(r#"{{"wasm":{{"len":{}}}}}"#, len).into_bytes();
+                let contract_result =
+                    call_execute::<_, _, _, Empty>(&mut instance, &mock_env(), &info, &msg)
+                        .unwrap();
+                contract_result.into_result().unwrap();
+                gas_used = gas_before - instance.get_gas_left();
+            });
+            if gas_reports_wasm.len() < (i - 5) as usize {
+                gas_reports_wasm.push((len, block, gas_used))
+            }
+        });
+
+        group.bench_function(BenchmarkId::new("API/blocks", block), |b| {
+            let backend = mock_backend(&[]);
+            let much_gas: InstanceOptions = InstanceOptions {
+                gas_limit: HIGH_GAS_LIMIT,
+                ..DEFAULT_INSTANCE_OPTIONS
+            };
+            let mut instance =
+                Instance::from_code(CONTRACT_SHA1, backend, much_gas, Some(DEFAULT_MEMORY_LIMIT))
+                    .unwrap();
+
+            let info = mock_info("creator", &coins(1000, "earth"));
+            let msg = br#"{}"#;
+            let contract_result =
+                call_instantiate::<_, _, _, Empty>(&mut instance, &mock_env(), &info, msg).unwrap();
+            contract_result.into_result().unwrap();
+
+            let mut gas_used = 0;
+            b.iter(|| {
+                let gas_before = instance.get_gas_left();
+                let info = mock_info("foo", &[]);
+                let msg = format!(r#"{{"api":{{"len":{}}}}}"#, len).into_bytes();
+                let contract_result =
+                    call_execute::<_, _, _, Empty>(&mut instance, &mock_env(), &info, &msg)
+                        .unwrap();
+                contract_result.into_result().unwrap();
+                gas_used = gas_before - instance.get_gas_left();
+            });
+            if gas_reports_api.len() < (i - 5) as usize {
+                gas_reports_api.push((len, block, gas_used))
+            }
+        });
+    }
+    for i in 0..gas_reports_wasm.len() {
+        let wasm = gas_reports_wasm[i];
+        let api = gas_reports_api[i];
+        println!("gas wasm/{}bytes({}blocks): {}", wasm.0, wasm.1, wasm.2);
+        println!("gas api /{}bytes({}blocks): {}", api.0, api.1, api.2);
+    }
+
+    group.finish();
+}
+
+fn bench_uuid(c: &mut Criterion) {
+    let mut group = c.benchmark_group("uuid");
+
+    // used_gas
+    let mut gas_used_wasm = 0u64;
+    let mut gas_used_api = 0u64;
+
+    group.bench_function("WASM", |b| {
+        let backend = mock_backend(&[]);
+        let much_gas: InstanceOptions = InstanceOptions {
+            gas_limit: HIGH_GAS_LIMIT,
+            ..DEFAULT_INSTANCE_OPTIONS
+        };
+        let mut instance =
+            Instance::from_code(CONTRACT_UUID, backend, much_gas, Some(DEFAULT_MEMORY_LIMIT))
+            .unwrap();
+
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let msg = br#"{}"#;
+        let contract_result =
+            call_instantiate::<_, _, _, Empty>(&mut instance, &mock_env(), &info, msg).unwrap();
+        contract_result.into_result().unwrap();
+
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let info = mock_info("foo", &[]);
+            let msg = br#"{"wasm":{}}"#;
+            let contract_result =
+                call_execute::<_, _, _, Empty>(&mut instance, &mock_env(), &info, msg)
+                .unwrap();
+            contract_result.into_result().unwrap();
+            gas_used_wasm = gas_before - instance.get_gas_left();
+        });
+    });
+
+    group.bench_function("API", |b| {
+        let backend = mock_backend(&[]);
+        let much_gas: InstanceOptions = InstanceOptions {
+            gas_limit: HIGH_GAS_LIMIT,
+            ..DEFAULT_INSTANCE_OPTIONS
+        };
+        let mut instance =
+            Instance::from_code(CONTRACT_UUID, backend, much_gas, Some(DEFAULT_MEMORY_LIMIT))
+            .unwrap();
+
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let msg = br#"{}"#;
+        let contract_result =
+            call_instantiate::<_, _, _, Empty>(&mut instance, &mock_env(), &info, msg).unwrap();
+        contract_result.into_result().unwrap();
+
+        b.iter(|| {
+            let gas_before = instance.get_gas_left();
+            let info = mock_info("foo", &[]);
+            let msg = br#"{"api":{}}"#;
+            let contract_result =
+                call_execute::<_, _, _, Empty>(&mut instance, &mock_env(), &info, msg)
+                .unwrap();
+            contract_result.into_result().unwrap();
+            gas_used_api = gas_before - instance.get_gas_left();
+        });
+    });
+    println!("gas wasm: {}", gas_used_wasm);
+    println!("gas api : {}", gas_used_api);
+
+    group.finish();
+}
+
 fn make_config() -> Criterion {
     Criterion::default()
+        .without_plots()
+        .measurement_time(Duration::new(10, 0))
+        .sample_size(12)
+        .configure_from_args()
+}
+
+fn make_inversion_throughput_config() -> Criterion<InvertedThroughput> {
+    Criterion::default()
+        .with_measurement(InvertedThroughput::new())
         .without_plots()
         .measurement_time(Duration::new(10, 0))
         .sample_size(12)
@@ -338,4 +508,14 @@ criterion_group!(
         .configure_from_args();
     targets = bench_instance_threads
 );
-criterion_main!(instance, cache, multi_threaded_instance);
+criterion_group!(
+    name = sha1;
+    config = make_inversion_throughput_config();
+    targets = bench_sha1
+);
+criterion_group!(
+    name = uuid;
+    config = make_config();
+    targets = bench_uuid
+);
+criterion_main!(instance, cache, multi_threaded_instance, sha1, uuid);

@@ -69,6 +69,16 @@ docker run --rm -v "$(pwd)":/code \
   --mount type=volume,source="devcontract_cache_voting_with_uuid",target=/code/contracts/voting-with-uuid/target \
   --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
   cosmwasm/rust-optimizer:0.12.9 ./contracts/voting-with-uuid
+
+docker run --rm -v "$(pwd)":/code \
+  --mount type=volume,source="devcontract_cache_bench_sha1",target=/code/contracts/bench-sha1/target \
+  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+  cosmwasm/rust-optimizer:0.12.9 ./contracts/bench-sha1
+
+docker run --rm -v "$(pwd)":/code \
+  --mount type=volume,source="devcontract_cache_bench_uuid",target=/code/contracts/bench-uuid/target \
+  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+  cosmwasm/rust-optimizer:0.12.9 ./contracts/bench-uuid
 ```
 
 ## Entry points
@@ -85,3 +95,4 @@ points in order to demonstrate and test the flexibility we have.
 | reflect          | yes         | no            |
 | staking          | yes         | no            |
 | voting-with-uuid | yes         | no            |
+| bench_sha1       | no          | no            |
